@@ -150,6 +150,7 @@ def export_formats():
         ["NCNN", "ncnn", "_ncnn_model", True, True, ["batch", "half"]],
         ["IMX", "imx", "_imx_model", True, True, ["data", "int8", "fraction", "nms"]],
         ["RKNN", "rknn", "_rknn_model", False, False, ["batch", "name"]],
+        ["RDK", "rdk", "_rdk_model", False, False, ["imgsz", "data"]],
         ["ExecuTorch", "executorch", "_executorch_model", True, False, ["batch"]],
         ["Axelera AI", "axelera", "_axelera_model", False, False, ["batch", "int8", "fraction", "data"]],
     ]
@@ -514,7 +515,6 @@ class Exporter:
             f"output shape(s) {self.output_shape} ({file_size(file):.1f} MB)"
         )
         self.run_callbacks("on_export_start")
-
         # Export
         if is_tf_format:
             self.args.int8 |= fmt == "edgetpu"
@@ -1028,6 +1028,26 @@ class Exporter:
             metadata=self.metadata,
             prefix=prefix,
         )
+
+    @try_export
+    def export_rdk(self, prefix=colorstr("RDK:")):
+        """Export YOLO model to RDK format."""
+        LOGGER.info(f"\n{prefix} starting export...")
+
+        from ultralytics.utils.export.rdk import apply_rdk_patches, export_rdk, restore_rdk_patches
+
+        patches = apply_rdk_patches(self.model)
+
+        old_opset = self.args.opset
+        try:
+            self.args.opset = 11
+            onnx_path = self.export_onnx()
+            return export_rdk(
+                model=self.model, args=self.args, onnx_path=onnx_path, metadata=self.metadata, prefix=prefix
+            )
+        finally:
+            self.args.opset = old_opset
+            restore_rdk_patches(patches)
 
     @try_export
     def export_imx(self, prefix=colorstr("IMX:")):
